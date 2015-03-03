@@ -22,25 +22,61 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(__dirname + '/public'));
 
+app.get('/login',
+  function(req, res) {
+    res.render('login');
+  });
 
-app.get('/', 
+app.get('/',
 function(req, res) {
   res.render('index');
 });
 
-app.get('/create', 
+app.get('/create',
 function(req, res) {
   res.render('index');
 });
 
-app.get('/links', 
+app.get('/links',
 function(req, res) {
   Links.reset().fetch().then(function(links) {
     res.send(200, links.models);
   });
 });
 
-app.post('/links', 
+app.get('/signup',
+  function(req, res) {
+    res.render('signup');
+  });
+
+app.post('/signup',
+  function(req, res){
+    console.log("we've entered into signup logic");
+    var username = req.body.username;
+    var password = req.body.password;
+    //add content test for username and password later
+
+    new User({username: username}).fetch().then(function(found) {
+      if(found){
+        res.send(418, 'username already exists, please login');
+      } else {
+        console.log("We've entered new user creation");
+        var user = new User({
+          username: username,
+          passalt: password
+        });
+
+        user.save().then(function(newUser){
+          console.log('user saved to db', newUser);
+          Users.add(newUser);
+          res.send(200, newUser);
+        });
+      }
+    });
+  });
+
+
+app.post('/links',
 function(req, res) {
   var uri = req.body.url;
 
