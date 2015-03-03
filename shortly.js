@@ -4,6 +4,7 @@ var partials = require('express-partials');
 var bodyParser = require('body-parser');
 var session = require('express-session');
 var bcrypt = require('bcrypt-nodejs');
+var cookieParser = require('cookie-parser');
 
 
 var db = require('./app/config');
@@ -22,7 +23,23 @@ app.use(partials());
 app.use(bodyParser.json());
 // Parse forms (signup/login)
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+  resave: false,
+  saveUninitialized: false,
+  secret: 'shhh, very secret'
+}));
+app.use(cookieParser());
 app.use(express.static(__dirname + '/public'));
+
+
+var restricted = function(req, res, next){
+  if (req.session.user) {
+    next();
+  } else {
+    req.session.error = 'Access denied!';
+    res.redirect('login');
+  }
+};
 
 app.get('/login',
   function(req, res) {
@@ -38,20 +55,21 @@ function(req, res) {
   res.render('index');
 });
 
-app.get('/create',
+app.get('/create', restricted,
 function(req, res) {
-  util.sessionState(req, function(found){
-    if(found){
-      res.render('index');
-    } else {
-      res.render('login');
-    }
-  });
+  res.render('create');
+  // util.sessionState(req, function(found){
+  //   if(found){
+  //     res.render('index');
+  //   } else {
+  //     res.render('login');
+  //   }
+  // });
 });
 
-app.get('/links',
+app.get('/links', restricted,
 function(req, res) {
-  Links.reset().fetch().then(function(links) {
+  Links.query({user_id: req.session.user}).fetch().then(function(links) {
     res.send(200, links.models);
   });
 });
@@ -69,16 +87,23 @@ app.post('/login',
     new User({username:username}).fetch()
     .then(function(model){
       hash = model.get('passalt');
+      var userID = model.get('id');
       console.log("This is the passalt: ", hash);
-      bcrypt.compare(password, hash, function(err, res){
+      bcrypt.compare(password, hash, function(err, result){
         if (err){
           console.log("This is the error: ", err);
         }
-        if (res){
+        if (result){
+          req.session.regenerate(function(){
+            req.session.user = userID;
+            res.redirect('index');
+          });
           console.log("passwords match");
         }
-        if (!res){
+        if (!result){
           console.log("passwords don't match");
+          res.redirect('login');
+
         }
       });
 
@@ -135,6 +160,7 @@ function(req, res) {
         var link = new Link({
           url: uri,
           title: title,
+          user_id: req.session.user,
           base_url: req.headers.origin
         });
 
