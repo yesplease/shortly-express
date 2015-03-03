@@ -2,6 +2,8 @@ var express = require('express');
 var util = require('./lib/utility');
 var partials = require('express-partials');
 var bodyParser = require('body-parser');
+var session = require('express-session');
+var bcrypt = require('bcrypt-nodejs');
 
 
 var db = require('./app/config');
@@ -29,12 +31,22 @@ app.get('/login',
 
 app.get('/',
 function(req, res) {
+  //update this to test for logged in in state or not
+  //by checking in the cookie
+    //if not logged in, send to login page
+    //if logged in, res.render('index')
   res.render('index');
 });
 
 app.get('/create',
 function(req, res) {
-  res.render('index');
+  util.sessionState(req, function(found){
+    if(found){
+      res.render('index');
+    } else {
+      res.render('login');
+    }
+  });
 });
 
 app.get('/links',
@@ -49,9 +61,32 @@ app.get('/signup',
     res.render('signup');
   });
 
+app.post('/login',
+  function(req, res){
+    var username = req.body.username;
+    var password = req.body.password;
+    var hash = '';
+    new User({username:username}).fetch()
+    .then(function(model){
+      hash = model.get('passalt');
+      console.log("This is the passalt: ", hash);
+      bcrypt.compare(password, hash, function(err, res){
+        if (err){
+          console.log("This is the error: ", err);
+        }
+        if (res){
+          console.log("passwords match");
+        }
+        if (!res){
+          console.log("passwords don't match");
+        }
+      });
+
+    });
+  });
+
 app.post('/signup',
   function(req, res){
-    console.log("we've entered into signup logic");
     var username = req.body.username;
     var password = req.body.password;
     //add content test for username and password later
@@ -60,16 +95,18 @@ app.post('/signup',
       if(found){
         res.send(418, 'username already exists, please login');
       } else {
-        console.log("We've entered new user creation");
-        var user = new User({
-          username: username,
-          passalt: password
-        });
 
-        user.save().then(function(newUser){
-          console.log('user saved to db', newUser);
-          Users.add(newUser);
-          res.send(200, newUser);
+        util.hashPass(password, function(hash){
+          var user = new User({
+            username: username,
+            passalt: hash
+          });
+
+          user.save().then(function(newUser){
+            Users.add(newUser);
+            res.render('index');
+            // res.send(200, newUser);
+          });
         });
       }
     });

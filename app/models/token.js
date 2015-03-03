@@ -1,26 +1,23 @@
 var db = require('../config');
-var Click = require('./click');
 var User = require('./user');
 var crypto = require('crypto');
 
-var Link = db.Model.extend({
-  tableName: 'urls',
+var Token = db.Model.extend({
+  tableName: 'token',
   hasTimestamps: true,
   defaults: {
-    visits: 0
-  },
-  clicks: function() {
-    return this.hasMany(Click);
+    expires: 24
   },
   user: function(){
     return this.belongsTo(User, 'user_id');
-
   },
+
   initialize: function(){
     this.on('creating', function(model, attrs, options){
       var shasum = crypto.createHash('sha1');
-      shasum.update(model.get('url'));
-      model.set('code', shasum.digest('hex').slice(0, 5));
+      shasum.update(Math.random().toString());
+      model.set('token', shasum.digest('hex').slice(0, 20));
+      console.log("model's token set to: ", model.get('token'));
     });
   }
 });
