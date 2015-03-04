@@ -32,44 +32,30 @@ app.use(cookieParser());
 app.use(express.static(__dirname + '/public'));
 
 
-var restricted = function(req, res, next){
-  if (req.session.user) {
-    next();
-  } else {
-    req.session.error = 'Access denied!';
-    res.redirect('login');
-  }
-};
-
 app.get('/login',
   function(req, res) {
     res.render('login');
   });
 
-app.get('/',
-function(req, res) {
-  //update this to test for logged in in state or not
-  //by checking in the cookie
-    //if not logged in, send to login page
-    //if logged in, res.render('index')
-  res.render('index');
+app.get('/logout', function(req, res){
+  req.session.destroy(function(){
+    res.redirect('/login');
+  });
 });
 
-app.get('/create', restricted,
+app.get('/', util.checkUser,
+function(req, res) {
+  res.render('index'); //NOTE: Could not use '/index'but had to use 'index'
+});
+
+app.get('/create', util.checkUser,
 function(req, res) {
   res.render('create');
-  // util.sessionState(req, function(found){
-  //   if(found){
-  //     res.render('index');
-  //   } else {
-  //     res.render('login');
-  //   }
-  // });
 });
 
-app.get('/links', restricted,
+app.get('/links', util.checkUser,
 function(req, res) {
-  Links.query({user_id: req.session.user}).fetch().then(function(links) {
+  Links.reset().fetch().then(function(links) {
     res.send(200, links.models);
   });
 });
@@ -86,27 +72,26 @@ app.post('/login',
     var hash = '';
     new User({username:username}).fetch()
     .then(function(model){
+      if(!model){
+        return res.redirect('/signup');
+      }
       hash = model.get('passalt');
       var userID = model.get('id');
-      console.log("This is the passalt: ", hash);
+      // console.log("This is the passalt: ", hash);
       bcrypt.compare(password, hash, function(err, result){
         if (err){
           console.log("This is the error: ", err);
         }
         if (result){
-          req.session.regenerate(function(){
-            req.session.user = userID;
-            res.redirect('index');
-          });
           console.log("passwords match");
+          util.startSession(req, res, model);
         }
+
         if (!result){
           console.log("passwords don't match");
-          res.redirect('login');
-
+          res.redirect('/signup');
         }
       });
-
     });
   });
 
@@ -114,13 +99,12 @@ app.post('/signup',
   function(req, res){
     var username = req.body.username;
     var password = req.body.password;
-    //add content test for username and password later
 
     new User({username: username}).fetch().then(function(found) {
       if(found){
         res.send(418, 'username already exists, please login');
       } else {
-
+        console.log("About to hash pwd on new user");
         util.hashPass(password, function(hash){
           var user = new User({
             username: username,
@@ -129,8 +113,8 @@ app.post('/signup',
 
           user.save().then(function(newUser){
             Users.add(newUser);
-            res.render('index');
-            // res.send(200, newUser);
+            util.startSession(req, res, newUser);
+            // res.render('/index');
           });
         });
       }
@@ -190,6 +174,7 @@ app.get('/*', function(req, res) {
     if (!link) {
       res.redirect('/');
     } else {
+      console.log("this is the req params[0]", req.params[0]);
       var click = new Click({
         link_id: link.get('id')
       });
